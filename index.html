@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Closet Manager Pro</title>
+<style>
+body { font-family: Arial; margin:0; background:#1e1e1e; color:#fff; }
+header { background:#111; padding:15px; text-align:center; }
+.container { display:flex; gap:10px; padding:10px; }
+.column { flex:1; background:#2a2a2a; padding:10px; border-radius:10px; min-height:300px; }
+.column h2 { text-align:center; }
+.card { background:#3a3a3a; padding:10px; margin:5px 0; border-radius:8px; cursor:grab; }
+.card.drag-over { outline:2px dashed #fff; }
+.dropzone { border:2px dashed #555; padding:10px; margin-bottom:10px; text-align:center; border-radius:8px; }
+button { margin:2px; cursor:pointer; }
+input { width:100%; margin:3px 0; padding:6px; border-radius:5px; border:none; }
+.green { border-top:5px solid #00c853; }
+.blue { border-top:5px solid #2962ff; }
+.red { border-top:5px solid #d50000; }
+#points { text-align:center; font-weight:bold; margin-top:5px; }
+img { max-width:100%; border-radius:6px; margin-top:5px; }
+@media(max-width:800px){ .container{flex-direction:column;} }
+</style>
+</head>
+<body>
+<header>
+<h1>Closet Manager Pro</h1>
+<div id="points">Pontos: 0</div>
+</header>
+
+<div class="container">
+<div class="column green" ondragover="allowDrop(event)" ondrop="dropColumn(event,'have')">
+<h2>Tenho</h2>
+<div class="dropzone" ondragover="allowDrop(event)" ondrop="dropExternal(event,'have')">Arraste link ou imagem de loja aqui</div>
+<input placeholder="Nome" id="haveName">
+<input placeholder="Descrição" id="haveDesc">
+<input placeholder="URL da imagem" id="haveImg">
+<button onclick="addItem('have')">Adicionar</button>
+<div id="haveList"></div>
+</div>
+
+<div class="column blue" ondragover="allowDrop(event)" ondrop="dropColumn(event,'want')">
+<h2>Quero</h2>
+<div class="dropzone" ondragover="allowDrop(event)" ondrop="dropExternal(event,'want')">Arraste link ou imagem de loja aqui</div>
+<input placeholder="Nome" id="wantName">
+<input placeholder="Descrição" id="wantDesc">
+<input placeholder="URL da imagem" id="wantImg">
+<button onclick="addItem('want')">Adicionar</button>
+<div id="wantList"></div>
+</div>
+
+<div class="column red" ondragover="allowDrop(event)" ondrop="dropColumn(event,'need')">
+<h2>Preciso</h2>
+<div class="dropzone" ondragover="allowDrop(event)" ondrop="dropExternal(event,'need')">Arraste link ou imagem de loja aqui</div>
+<input placeholder="Nome" id="needName">
+<input placeholder="Descrição" id="needDesc">
+<input placeholder="URL da imagem" id="needImg">
+<button onclick="addItem('need')">Adicionar</button>
+<div id="needList"></div>
+</div>
+</div>
+
+<script>
+let data = JSON.parse(localStorage.getItem('closet')) || {have:[], want:[], need:[], points:0};
+let dragged = null;
+
+function save(){ localStorage.setItem('closet', JSON.stringify(data)); }
+
+function render(){
+['have','want','need'].forEach(type=>{
+let div = document.getElementById(type+'List');
+div.innerHTML='';
+data[type].forEach((item,i)=>{
+let el = document.createElement('div');
+el.className='card';
+el.draggable = true;
+
+el.ondragstart = (e)=> drag(e,type,i);
+el.ondragover = (e)=> onDragOverCard(e);
+el.ondrop = (e)=> dropOnCard(e,type,i);
+
+el.innerHTML = `
+<b contenteditable="true" onblur="editItem('${type}',${i},this.innerText,'name')">${item.name}</b><br>
+<span contenteditable="true" onblur="editItem('${type}',${i},this.innerText,'desc')">${item.desc}</span>
+${item.img ? `<img src="${item.img}">` : ''}
+${item.link ? `<br><a href="${item.link}" target="_blank">Ver produto</a>` : ''}
+<br>
+<button onclick="removeItem('${type}',${i})">Excluir</button>
+`;
+div.appendChild(el);
+});
+});
+document.getElementById('points').innerText = 'Pontos: '+data.points;
+save();
+}
+
+function addItem(type){
+let name = document.getElementById(type+'Name').value;
+let desc = document.getElementById(type+'Desc').value;
+let img = document.getElementById(type+'Img').value;
+if(!name) return;
+data[type].push({name,desc,img});
+data.points += 2;
+render();
+}
+
+function dropExternal(ev,type){
+ev.preventDefault();
+let url = ev.dataTransfer.getData("text/uri-list") || ev.dataTransfer.getData("text/plain");
+if(!url) return;
+
+data[type].push({
+name: "Produto importado",
+desc: "Adicionado via arrastar",
+img: url.includes(".jpg") || url.includes(".png") ? url : "",
+link: url
+});
+
+data.points += 3;
+render();
+}
+
+function editItem(type,i,value,field){ data[type][i][field] = value; save(); }
+function removeItem(type,i){ data[type].splice(i,1); render(); }
+function drag(ev,type,i){ dragged = {type,i}; }
+function allowDrop(ev){ ev.preventDefault(); }
+
+function onDragOverCard(ev){ ev.preventDefault(); ev.currentTarget.classList.add('drag-over'); }
+
+function dropOnCard(ev,targetType,targetIndex){
+ev.preventDefault();
+document.querySelectorAll('.card').forEach(c=>c.classList.remove('drag-over'));
+if(!dragged) return;
+
+let removed = data[dragged.type].splice(dragged.i,1)[0];
+if(dragged.type===targetType && dragged.i < targetIndex) targetIndex--;
+
+data[targetType].splice(targetIndex,0,removed);
+
+dragged = null;
+render();
+}
+
+function dropColumn(ev,targetType){
+ev.preventDefault();
+if(!dragged) return;
+
+let item = data[dragged.type][dragged.i];
+data[targetType].push(item);
+data[dragged.type].splice(dragged.i,1);
+
+dragged = null;
+render();
+}
+
+render();
+</script>
+
+</body>
+</html>
